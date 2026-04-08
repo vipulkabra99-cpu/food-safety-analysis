@@ -1,6 +1,7 @@
+from rules import analyze_food_safety
 from fastapi import FastAPI
 from pydantic import BaseModel
-from model import predict_food
+from food_detection_model import predict_food
 from nutrition_utils import get_nutrition, calculate_risk
 import base64
 from PIL import Image
@@ -11,6 +12,9 @@ app = FastAPI()
 class FoodRequest(BaseModel):
     food: str | None = None
     image: str | None = None
+    diseases: list[str] = []
+    medications: list[str] = []
+    ecg_status: str = "normal"
 
 
 @app.post("/analyze-food")
@@ -22,8 +26,6 @@ def analyze_food(request: FoodRequest):
 
     # Case 2: image uploaded
     elif request.image:
-
-        # image_bytes = base64.b64decode(request.image)
         image_data = request.image
 
         if "," in image_data:
@@ -44,17 +46,31 @@ def analyze_food(request: FoodRequest):
     if nutrition is None:
         return {"error": "Food not found"}
 
+    # Existing risk (general)
     risk, reasons = calculate_risk(nutrition)
+
+    # Patient-aware analysis
+    patient = {
+        "diseases": request.diseases,
+        "medications": request.medications,
+        "ecg_status": request.ecg_status
+    }
+
+    safety_status, safety_reasons = analyze_food_safety(patient, nutrition)
 
     return {
         "food_detected": food,
         "nutrition": {
-            "calories": round(nutrition["Caloric Value"],2),
-            "fat": round(nutrition["Fat"],2),
-            "saturated_fat": round(nutrition["Saturated Fats"],2),
-            "sugar": round(nutrition["Sugars"],2),
-            "sodium": round(nutrition["Sodium"]*1000,2)
+            "calories": round(nutrition["Caloric Value"], 2),
+            "fat": round(nutrition["Fat"], 2),
+            "saturated_fat": round(nutrition["Saturated Fats"], 2),
+            "sugar": round(nutrition["Sugars"], 2),
+            "sodium": round(nutrition["Sodium"] * 1000, 2)
         },
         "heart_health_risk": risk,
-        "reasons": reasons
+        "general_reasons": reasons,
+
+        # YOUR OUTPUT
+        "food_safety_status": safety_status,
+        "food_safety_reasons": safety_reasons
     }
